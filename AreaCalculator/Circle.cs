@@ -6,9 +6,9 @@
     /// </summary>
     public class Circle
     {
-        public int r;
+        public double  r;
         
-        public Circle(int r) { this.r = r; }
+        public Circle(double r) { this.r = r; }
 
         /// <summary>
         /// Method <c>Area</c> calculates the area of the circle

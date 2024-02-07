@@ -8,6 +8,8 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using AreaCalculator.Utils;
+using MathNet.Numerics.LinearAlgebra;
+using MathNet.Numerics.LinearAlgebra.Double;
 
 namespace AreaCalculator
 {
@@ -16,14 +18,11 @@ namespace AreaCalculator
     /// </summary>
     public class Shape
     {
-        public Func<double[], double[]> Parametric { get; set; }
+        public Parametric Parametric { get; set; }
 
-        public Tuple<double[], double[]> Domain { get; set; }
-
-        public Shape(Func<double[], double[]> parametric, Tuple<double[], double[]> domain)
+        public Shape(Func<double[], double[]> parametric, Tuple<double[], double[]> domain, int codimension)
         {
-            Parametric = parametric;
-            Domain = domain;
+            Parametric = new Parametric(parametric, domain.Item1.Length, codimension, domain);
         }
 
         /// <summary>
@@ -33,13 +32,43 @@ namespace AreaCalculator
         /// <returns>Precise area of the shape determined by the number of integral partitions</returns>
         public double Area(int partitions)
         {
-            int rangeL = Domain.Item2.Length;
+            Func<double[], int, double[]> partial = (t, id) =>
+            {
+                double[] full = new double[Parametric.Codimension];
+                for (int i = 0; i < Parametric.Codimension; i++)
+                {
+                    full[i] = Differentiate.FirstPartialDerivative(s => Parametric.Func(s)[i], t, id);
+                }
+                return full;
+            };
 
-            Func<double[], double[], double> abscross = (u, v) => Euclidean.AbsCross(u, v);
+            Func<double[], double> dvolume = (u) =>
+            {
+                double[][] U = new double[u.Length][];
+
+                for (int i = 0; i < u.Length; i++)
+                {
+                    U[i] = partial(u, i);
+                }
+
+                return Euclidean.NVolume(U);
+            };
+
+            Func<double[], double> volume = u => SimpsonRule.IntegrateComposite(t => dvolume(u.Prepend(t).ToArray()), Parametric.Domain.Item1[0], Parametric.Domain.Item2[0], partitions);
+
+            for (int i = 1; i <  Parametric.Domain.Item1.Length; i++)
+            {
+                volume = u => SimpsonRule.IntegrateComposite(t => volume(u[..i].Append(t).Concat(u[(i+1)..]).ToArray()), Parametric.Domain.Item1[i], Parametric.Domain.Item2[i], partitions);
+            }
+
+            double[] vector = new double[Parametric.Dimension];
+
+            for (int i = 0; i < Parametric.Dimension; i++)
+            {
+                vector[i] = 0;
+            }
             
-            double[] area = SimpsonRule.IntegrateComposite(t => Differentiate.PartialDerivative(s => Parametric(s)[0], t, 0, 1), Domain.Item1[0], Domain.Item2[0], partitions);
-
-            return SimpsonRule.IntegrateComposite(t => Differentiate.Derivative(s => Parametric(s)[0], t, 1), Domain.Item1, Domain.Item2, partitions);
+            return volume(vector);
         }
     }
 }
